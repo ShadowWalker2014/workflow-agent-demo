@@ -49,6 +49,25 @@ The `/api/chat` route swaps the stock `createModelCallToUIChunkTransform()` for 
 `toUIMessageChunk` but also passes `data-*` parts through and emits a `message-metadata` chunk carrying token usage —
 the stock transform drops both.
 
+## Durable & resumable sessions
+
+The whole point of a Workflow agent: **the run keeps executing server-side even if the browser disconnects.** This demo
+wires that up (recipe 03):
+
+- `POST /api/chat` starts a durable run and returns `x-workflow-run-id`.
+- The client uses **`WorkflowChatTransport`** + `useChat({ resume })`; it persists the run id (and the transcript) to
+  `localStorage`.
+- On refresh, `GET /api/chat/[runId]/stream` re-attaches to the same run via `getRun(runId).getReadable()` and replays it —
+  the in-flight agent turn continues instead of restarting.
+
+**Try it:** send a message that triggers a long turn (e.g. *"Research the Workflow DevKit…"*), then **refresh the browser
+mid-generation** — the answer keeps streaming in. Come back later and the conversation is still there.
+
+**Do you need a database?** For local testing, **no** — the Workflow **Local World** persists runs/stream chunks to
+`.workflow-data/` on disk, so refresh-while-`next dev`-is-running resumes out of the box. On **Vercel**, the durable store
+is fully managed (nothing to provision). You only need a Postgres world (`@workflow/world-postgres`) if you want a turn that
+was mid-generation to auto-resume across a **server restart** locally — see recipe 06 of the `vercel-workflow-agents` skill.
+
 ## Deploy
 
 Deploys to **Vercel** as-is (`next build` passes). Set `EXA_API_KEY` (and `AI_GATEWAY_API_KEY` or rely on OIDC) in the

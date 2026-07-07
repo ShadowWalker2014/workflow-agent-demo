@@ -1,8 +1,7 @@
 import { WorkflowAgent, type ModelCallStreamPart } from "@ai-sdk/workflow";
 import { getWritable } from "workflow";
-import { stepCountIs, tool, type ModelMessage } from "ai";
-import { z } from "zod";
-import { buildTools, CORE_TOOLS, DEFERRED_CATALOG } from "@/app/lib/tools";
+import { stepCountIs, type ModelMessage } from "ai";
+import { buildTools, CORE_TOOLS, DEFERRED_CATALOG } from "@/app/tools/registry";
 
 // High extended-thinking budget for Claude (interleaved with tool use). Kept
 // under both models' output ceilings so it never 400s (Opus 4.1 caps at 32k out).
@@ -17,20 +16,7 @@ export async function chatWorkflow(messages: ModelMessage[], model?: string) {
 
   const writable = getWritable<ModelCallStreamPart>();
 
-  // load_tool is defined here so it can validate against the deferred catalog.
-  const loadTool = tool({
-    description:
-      "Load a deferred tool's schema so you can call it on your NEXT step. Only deferred tools listed in the catalog need this.",
-    inputSchema: z.object({ names: z.array(z.string()).describe("Deferred tool names to load") }),
-    execute: async ({ names }: { names: string[] }) => {
-      const known = new Set(Object.keys(DEFERRED_CATALOG));
-      const unlocked_tools = names.filter((n) => known.has(n));
-      const rejected = names.filter((n) => !known.has(n));
-      return { unlocked_tools, rejected };
-    },
-  });
-
-  const tools = buildTools(loadTool);
+  const tools = buildTools();
 
   const catalog = Object.entries(DEFERRED_CATALOG)
     .map(([n, d]) => `  - ${n}: ${d}`)

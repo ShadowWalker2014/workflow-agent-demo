@@ -43,3 +43,6 @@ dev.log
 *.tsbuildinfo
 next-env.d.ts
 /.swc
+
+# workflow devkit local world (durable runs/events/stream chunks on disk)
+/.workflow-data

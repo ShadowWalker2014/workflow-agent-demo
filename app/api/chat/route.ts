@@ -1,56 +1,12 @@
-import type { UIMessage, UIMessageChunk } from "ai";
+import type { UIMessage } from "ai";
 import { convertToModelMessages, createUIMessageStreamResponse } from "ai";
-import { toUIMessageChunk } from "@ai-sdk/workflow";
 import { start } from "workflow/api";
 import { chatWorkflow } from "@/app/workflows/chat";
+import { createMergedTransform } from "./transform";
 
-// Superset of the installed `LanguageModelUsage` (which carries token *details*
-// objects); we only aggregate the flat counters the <Context> component reads.
-type Usage = {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  reasoningTokens?: number;
-  cachedInputTokens?: number;
-};
-
-// Drop-in replacement for createModelCallToUIChunkTransform() that ALSO:
-//   • aggregates per-step usage from `model-call-end` → one final `message-metadata`
-//     chunk so the client can render <Context> (the stock transform drops usage), and
-//   • passes custom `data-*` parts straight through (the stock transform drops them).
-function createMergedTransform() {
-  const usage: Usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-  return new TransformStream<{ type?: string; usage?: Partial<Usage> }, UIMessageChunk>({
-    start(c) {
-      c.enqueue({ type: "start" });
-      c.enqueue({ type: "start-step" });
-    },
-    flush(c) {
-      c.enqueue({ type: "message-metadata", messageMetadata: { usage } });
-      c.enqueue({ type: "finish-step" });
-      c.enqueue({ type: "finish" });
-    },
-    transform(part, c) {
-      if (part?.type === "model-call-end" && part.usage) {
-        usage.inputTokens = (usage.inputTokens ?? 0) + (part.usage.inputTokens ?? 0);
-        usage.outputTokens = (usage.outputTokens ?? 0) + (part.usage.outputTokens ?? 0);
-        usage.totalTokens = (usage.totalTokens ?? 0) + (part.usage.totalTokens ?? 0);
-        if (part.usage.reasoningTokens != null)
-          usage.reasoningTokens = (usage.reasoningTokens ?? 0) + part.usage.reasoningTokens;
-        if (part.usage.cachedInputTokens != null)
-          usage.cachedInputTokens = (usage.cachedInputTokens ?? 0) + part.usage.cachedInputTokens;
-        return;
-      }
-      if (typeof part?.type === "string" && part.type.startsWith("data-")) {
-        c.enqueue(part as unknown as UIMessageChunk);
-        return;
-      }
-      const ui = toUIMessageChunk(part as never);
-      if (ui) c.enqueue(ui);
-    },
-  });
-}
-
+// POST — start a durable run for this turn and stream it. The run keeps executing
+// server-side even if the browser disconnects; `x-workflow-run-id` lets
+// WorkflowChatTransport reconnect to it on refresh (see [runId]/stream).
 export async function POST(req: Request) {
   const { messages, model }: { messages: UIMessage[]; model?: string } = await req.json();
   const modelMessages = await convertToModelMessages(messages);
@@ -59,5 +15,9 @@ export async function POST(req: Request) {
 
   return createUIMessageStreamResponse({
     stream: run.readable.pipeThrough(createMergedTransform()),
+    headers: {
+      // REQUIRED for resume — WorkflowChatTransport persists this and reconnects by it.
+      "x-workflow-run-id": run.runId,
+    },
   });
 }

@@ -1,15 +1,15 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { WorkflowChatTransport } from "@ai-sdk/workflow";
 import {
-  DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type LanguageModelUsage,
   type ToolUIPart,
   type UIMessage,
 } from "ai";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CopyIcon, RefreshCcwIcon, SearchIcon, XIcon, ListIcon, ChevronsUpDownIcon } from "lucide-react";
 
 import {
@@ -144,6 +144,12 @@ const starters = [
 type SearchResult = { title?: string; url?: string; text?: string };
 type QueuedMessage = { id: string; text: string; files?: PromptInputMessage["files"] };
 
+// Durable session: chatId identifies the session (history in localStorage); runId is
+// the in-flight durable run to reconnect to on refresh (recipe 03).
+const CHAT_ID_KEY = "wdk-chat-id";
+const RUN_ID_KEY = "wdk-active-run-id";
+const msgsKey = (id: string) => `wdk-msgs:${id}`;
+
 /* ───────────────────────────────  page  ─────────────────────────────── */
 
 export default function Home() {
@@ -154,9 +160,63 @@ export default function Home() {
 
   const model = models.find((m) => m.id === modelId) ?? models[0];
 
+  // Stable session id (survives refresh).
+  const chatId = useMemo(() => {
+    if (typeof window === "undefined") return "ssr";
+    let id = localStorage.getItem(CHAT_ID_KEY);
+    if (!id) {
+      id = `chat-${crypto.randomUUID()}`;
+      localStorage.setItem(CHAT_ID_KEY, id);
+    }
+    return id;
+  }, []);
+
+  // On mount: is there an in-flight run to reconnect to? + prior transcript to restore.
+  const activeRunIdOnMount = useMemo(
+    () => (typeof window === "undefined" ? null : localStorage.getItem(RUN_ID_KEY)),
+    [],
+  );
+  const initialMessages = useMemo<ChatMessage[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(localStorage.getItem(msgsKey(chatId)) || "[]") as ChatMessage[];
+    } catch {
+      return [];
+    }
+  }, [chatId]);
+
+  const transport = useMemo(
+    () =>
+      new WorkflowChatTransport({
+        api: "/api/chat",
+        // Attach chatId to the POST body (route can key server-side state to it).
+        prepareSendMessagesRequest: (config: { body?: Record<string, unknown> }) => ({
+          ...config,
+          body: { ...config.body, chatId },
+        }),
+        // After POST: persist the durable run id so a refresh can reconnect to it.
+        onChatSendMessage: (response: Response) => {
+          const runId = response.headers.get("x-workflow-run-id");
+          if (runId) localStorage.setItem(RUN_ID_KEY, runId);
+        },
+        // Terminal finish arrived — the turn is done; stop trying to reconnect.
+        onChatEnd: () => localStorage.removeItem(RUN_ID_KEY),
+        // Build the reconnect GET URL for the stored run.
+        prepareReconnectToStreamRequest: (config: Record<string, unknown>) => {
+          const runId = typeof window !== "undefined" ? localStorage.getItem(RUN_ID_KEY) : null;
+          if (!runId) throw new Error("No active workflow run to resume");
+          return { ...config, api: `/api/chat/${encodeURIComponent(runId)}/stream` };
+        },
+      }),
+    [chatId],
+  );
+
   const { messages, sendMessage, status, stop, error, regenerate, addToolOutput } =
     useChat<ChatMessage>({
-      transport: new DefaultChatTransport({ api: "/api/chat" }),
+      id: chatId,
+      messages: initialMessages,
+      resume: Boolean(activeRunIdOnMount), // refresh mid-run → reconnect to the live run
+      transport,
       sendAutomaticallyWhen: (opts) =>
         lastAssistantMessageIsCompleteWithToolCalls(opts) ||
         lastAssistantMessageIsCompleteWithApprovalResponses(opts),
@@ -164,6 +224,16 @@ export default function Home() {
     });
 
   const busy = status === "submitted" || status === "streaming";
+
+  // Persist the transcript so revisiting/refreshing restores the session history.
+  useEffect(() => {
+    if (typeof window === "undefined" || messages.length === 0) return;
+    try {
+      localStorage.setItem(msgsKey(chatId), JSON.stringify(messages));
+    } catch (e) {
+      console.error("[persist]", e);
+    }
+  }, [messages, chatId]);
 
   const dispatch = useCallback(
     (value: string, files?: PromptInputMessage["files"]) => {
