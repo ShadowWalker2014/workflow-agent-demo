@@ -60,8 +60,13 @@ wires that up (recipe 03):
 - On refresh, `GET /api/chat/[runId]/stream` re-attaches to the same run via `getRun(runId).getReadable()` and replays it —
   the in-flight agent turn continues instead of restarting.
 
+**Multi-chat:** every conversation lives at its own route **`/c/<id>`** with its own persisted transcript and durable run
+id, so you can run several in parallel, switch between them in the sidebar, and start fresh ones — each refreshes/resumes
+independently. `/` opens your most recent chat (or a new one). The header's **Open in…** menu (`open-in-chat`) re-opens the
+last query in ChatGPT / Claude / v0.
+
 **Try it:** send a message that triggers a long turn (e.g. *"Research the Workflow DevKit…"*), then **refresh the browser
-mid-generation** — the answer keeps streaming in. Come back later and the conversation is still there.
+mid-generation** — the answer keeps streaming in. Open a second chat in another tab; both resume on their own.
 
 **Do you need a database?** For local testing, **no** — the Workflow **Local World** persists runs/stream chunks to
 `.workflow-data/` on disk, so refresh-while-`next dev`-is-running resumes out of the box. On **Vercel**, the durable store
