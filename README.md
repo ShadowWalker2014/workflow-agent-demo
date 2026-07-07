@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Workflow Agent Demo
 
-## Getting Started
+A **durable AI chat agent** built on the Vercel stack, with a full [AI Elements](https://elements.ai-sdk.dev) UI:
 
-First, run the development server:
+- **[Vercel Workflow DevKit](https://workflow.vercel.sh)** — the agent runs as a durable, resumable workflow (`"use workflow"` / `"use step"`).
+- **[AI SDK](https://ai-sdk.dev) v7** + **[Vercel AI Gateway](https://vercel.com/docs/ai-gateway)** — one API for every model (`anthropic/*`, `openai/*`).
+- **[AI Elements](https://elements.ai-sdk.dev)** — the entire chat UI: conversation, streamed markdown, tool cards, reasoning, sources, plan, task, confirmation, context meter, model selector, attachments, and more.
+- **[Exa](https://exa.ai)** — live web search + a research subagent.
+
+## Features
+
+- **Extended thinking** — Claude reasoning streamed into the `Reasoning` ("Thinking") block.
+- **Live web search + inline citations** — `web_search` results become inline citation pills in the prose (`InlineCitation`) plus an end-of-message `Sources` list.
+- **Research subagent** — an agent-as-tool that runs its own search loop, surfaced in a `Plan` card.
+- **Human-in-the-loop** — a client-side confirmation tool gates sensitive actions via the `Confirmation` component.
+- **Deferred tools** — a lean tool core + `load_tool` to unlock the long tail on demand.
+- **Token usage meter** — per-turn usage surfaced to the `Context` component.
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # then fill in the keys
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+See [`.env.example`](./.env.example):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Var | Required | Notes |
+|---|---|---|
+| `AI_GATEWAY_API_KEY` | dev | Vercel AI Gateway key. On Vercel, OIDC is used automatically. |
+| `EXA_API_KEY` | yes | Powers `web_search` / `research`. Get one at [exa.ai](https://exa.ai). |
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+  page.tsx              # the AI Elements client (useChat)
+  api/chat/route.ts     # starts the durable run; merged transform (data-* + token usage)
+  workflows/chat.ts     # the WorkflowAgent ("use workflow") — model, thinking, tool loop
+  lib/tools.ts          # tools: get_time, web_search, research, schedule_reminder,
+                        #        render_widget, ask_for_confirmation (client/HITL), calculator (deferred)
+components/ai-elements/  # AI Elements components (shadcn/ui based)
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The `/api/chat` route swaps the stock `createModelCallToUIChunkTransform()` for a **merged transform** that reuses
+`toUIMessageChunk` but also passes `data-*` parts through and emits a `message-metadata` chunk carrying token usage —
+the stock transform drops both.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploy
 
-## Deploy on Vercel
+Deploys to **Vercel** as-is (`next build` passes). Set `EXA_API_KEY` (and `AI_GATEWAY_API_KEY` or rely on OIDC) in the
+project's Environment Variables. The Workflow durable runtime is managed by Vercel — nothing to provision.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+> The generated AI Elements components ship some upstream type-skew, so `next.config.ts` sets
+> `typescript.ignoreBuildErrors` (the app's own code typechecks clean under `strict`).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+MIT
