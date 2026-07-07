@@ -12,7 +12,16 @@ import {
   type UIMessage,
 } from "ai";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CopyIcon, RefreshCcwIcon, SearchIcon, XIcon, ListIcon, ChevronsUpDownIcon } from "lucide-react";
+import {
+  CopyIcon,
+  RefreshCcwIcon,
+  SearchIcon,
+  XIcon,
+  ListIcon,
+  ChevronsUpDownIcon,
+  ArrowUpIcon,
+  PencilIcon,
+} from "lucide-react";
 
 import {
   Conversation,
@@ -129,9 +138,14 @@ import {
   QueueSectionContent,
   QueueList,
   QueueItem,
+  QueueItemIndicator,
   QueueItemContent,
+  QueueItemDescription,
   QueueItemActions,
   QueueItemAction,
+  QueueItemAttachment,
+  QueueItemImage,
+  QueueItemFile,
 } from "@/components/ai-elements/queue";
 
 /* ─────────────────────────────── config ─────────────────────────────── */
@@ -288,6 +302,22 @@ function ChatSession({ chatId }: { chatId: string }) {
     setText("");
   };
 
+  // Queue item actions.
+  const removeQueued = (id: string) => setQueue((q) => q.filter((x) => x.id !== id));
+  const sendNowQueued = (id: string) =>
+    // Prioritize: move to the front so it's the next to drain when the turn frees up.
+    setQueue((q) => {
+      const item = q.find((x) => x.id === id);
+      return item ? [item, ...q.filter((x) => x.id !== id)] : q;
+    });
+  const editQueued = (id: string) => {
+    // Pull the queued text back into the composer to edit + resend.
+    const item = queue.find((x) => x.id === id);
+    if (!item) return;
+    setText(item.text);
+    removeQueued(id);
+  };
+
   const handleSubmit = (message: PromptInputMessage) => {
     if (busy && !message.text?.trim() && !message.files?.length) {
       stop();
@@ -397,23 +427,51 @@ function ChatSession({ chatId }: { chatId: string }) {
               <Queue>
                 <QueueSection defaultOpen>
                   <QueueSectionTrigger>
-                    <QueueSectionLabel count={queue.length} label="queued" icon={<ListIcon className="size-4" />} />
+                    <QueueSectionLabel
+                      count={queue.length}
+                      label={queue.length === 1 ? "queued message" : "queued messages"}
+                      icon={<ListIcon className="size-4" />}
+                    />
                   </QueueSectionTrigger>
                   <QueueSectionContent>
                     <QueueList>
-                      {queue.map((q) => (
+                      {queue.map((q, i) => (
                         <QueueItem key={q.id}>
                           <div className="flex items-center gap-2">
-                            <QueueItemContent>{q.text}</QueueItemContent>
+                            <QueueItemIndicator />
+                            <QueueItemContent>{q.text || "(attachment)"}</QueueItemContent>
                             <QueueItemActions>
                               <QueueItemAction
-                                onClick={() => setQueue((cur) => cur.filter((x) => x.id !== q.id))}
-                                aria-label="Remove"
+                                onClick={() => sendNowQueued(q.id)}
+                                aria-label="Send now"
+                                title="Send next"
+                                disabled={i === 0}
                               >
-                                <XIcon className="size-3" />
+                                <ArrowUpIcon className="size-3.5" />
+                              </QueueItemAction>
+                              <QueueItemAction onClick={() => editQueued(q.id)} aria-label="Edit" title="Edit">
+                                <PencilIcon className="size-3.5" />
+                              </QueueItemAction>
+                              <QueueItemAction onClick={() => removeQueued(q.id)} aria-label="Delete" title="Delete">
+                                <XIcon className="size-3.5" />
                               </QueueItemAction>
                             </QueueItemActions>
                           </div>
+                          {i === 0 && (
+                            <QueueItemDescription>Sends when the current turn finishes</QueueItemDescription>
+                          )}
+                          {q.files && q.files.length > 0 && (
+                            <QueueItemAttachment>
+                              {q.files.map((f, j) => {
+                                const file = f as { url?: string; mediaType?: string; filename?: string };
+                                return file.mediaType?.startsWith("image/") ? (
+                                  <QueueItemImage key={j} src={file.url} />
+                                ) : (
+                                  <QueueItemFile key={j}>{file.filename ?? "file"}</QueueItemFile>
+                                );
+                              })}
+                            </QueueItemAttachment>
+                          )}
                         </QueueItem>
                       ))}
                     </QueueList>
