@@ -14,7 +14,8 @@ export async function POST(req: Request) {
   const run = await start(chatWorkflow, [modelMessages, model]);
 
   return createUIMessageStreamResponse({
-    stream: run.readable.pipeThrough(createMergedTransform()),
+    // Stable assistant message id = msg-<runId>, so a resumed replay reconciles.
+    stream: run.readable.pipeThrough(createMergedTransform(`msg-${run.runId}`)),
     headers: {
       // REQUIRED for resume — WorkflowChatTransport persists this and reconnects by it.
       "x-workflow-run-id": run.runId,

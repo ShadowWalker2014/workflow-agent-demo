@@ -14,7 +14,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
   try {
     const readable = getRun(runId).getReadable();
     return createUIMessageStreamResponse({
-      stream: readable.pipeThrough(createMergedTransform()),
+      // Same stable message id as the POST → the replay updates the existing assistant
+      // message instead of appending a duplicate on every refresh.
+      stream: readable.pipeThrough(createMergedTransform(`msg-${runId}`)),
     });
   } catch (e) {
     // Stale/unknown run id (e.g. left in localStorage after a restart) — don't 500 the

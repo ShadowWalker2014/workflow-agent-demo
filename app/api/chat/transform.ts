@@ -18,11 +18,14 @@ type Usage = {
 //
 // Both the POST route and the resumable GET reconnect route pipe the run's
 // ModelCallStreamPart stream through a FRESH instance of this (state is per-call).
-export function createMergedTransform() {
+// `messageId` MUST be stable across the initial POST and every reconnect replay of the
+// SAME run — otherwise a resumed stream creates a NEW assistant message each refresh
+// (duplicate lines) instead of reconciling with the one already in the transcript.
+export function createMergedTransform(messageId?: string) {
   const usage: Usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   return new TransformStream<{ type?: string; usage?: Partial<Usage> }, UIMessageChunk>({
     start(c) {
-      c.enqueue({ type: "start" });
+      c.enqueue({ type: "start", messageId });
       c.enqueue({ type: "start-step" });
     },
     flush(c) {
