@@ -62,6 +62,15 @@ export function ChatSidebar() {
           })}
         </div>
       </ScrollArea>
+      <div className="border-t p-2">
+        <Link
+          href="/aui"
+          className="text-muted-foreground hover:text-foreground flex items-center justify-between rounded-md px-2 py-1.5 text-xs"
+        >
+          Compare: assistant-ui
+          <span aria-hidden>→</span>
+        </Link>
+      </div>
     </aside>
   );
 }

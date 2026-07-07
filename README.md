@@ -16,6 +16,18 @@ A **durable AI chat agent** built on the Vercel stack, with a full [AI Elements]
 - **Deferred tools** — a lean tool core + `load_tool` to unlock the long tail on demand.
 - **Token usage meter** — per-turn usage surfaced to the `Context` component.
 
+## Two UIs, one backend (comparison POC)
+
+The same durable WorkflowAgent backend powers two front-ends so you can compare frameworks:
+
+- **`/c/<id>`** — built with **[Vercel AI Elements](https://elements.ai-sdk.dev)** (18 components; multi-chat, resume, thinking, citations, HITL, queue…).
+- **`/aui`** — built with **[assistant-ui](https://www.assistant-ui.com)** (`Thread` + `ThreadList` + `Composer` + `Attachments`).
+
+Both talk to the *same* `/api/chat` durable run. assistant-ui's own AI-SDK adapter (`@assistant-ui/react-ai-sdk`) is
+pinned to the `ai@6` generation and we're on `ai@7`, so we skip it and bridge our `ai@7` `useChat` +
+`WorkflowChatTransport` into assistant-ui via `useExternalStoreRuntime` — keeping durable resume. (The assistant-ui
+thread list is in-memory for now; the AI Elements build has full localStorage persistence.)
+
 ## Getting started
 
 ```bash
