@@ -189,10 +189,16 @@ export default function Home() {
     () =>
       new WorkflowChatTransport({
         api: "/api/chat",
-        // Attach chatId to the POST body (route can key server-side state to it).
-        prepareSendMessagesRequest: (config: { body?: Record<string, unknown> }) => ({
+        // Overriding prepareSendMessagesRequest means WE build the body — `messages`
+        // is a TOP-LEVEL field here (not in `config.body`), so it must be added back
+        // or the route receives `undefined`. `config.body` carries the per-send
+        // `{ model }` from sendMessage.
+        prepareSendMessagesRequest: (config: {
+          messages: ChatMessage[];
+          body?: Record<string, unknown>;
+        }) => ({
           ...config,
-          body: { ...config.body, chatId },
+          body: { ...config.body, messages: config.messages, chatId },
         }),
         // After POST: persist the durable run id so a refresh can reconnect to it.
         onChatSendMessage: (response: Response) => {

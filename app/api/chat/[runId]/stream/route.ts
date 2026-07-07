@@ -11,8 +11,15 @@ import { createMergedTransform } from "../../transform";
 // relative tailing would land at the wrong spot; full replay is index-safe + cheap).
 export async function GET(_req: Request, { params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params;
-  const readable = getRun(runId).getReadable();
-  return createUIMessageStreamResponse({
-    stream: readable.pipeThrough(createMergedTransform()),
-  });
+  try {
+    const readable = getRun(runId).getReadable();
+    return createUIMessageStreamResponse({
+      stream: readable.pipeThrough(createMergedTransform()),
+    });
+  } catch (e) {
+    // Stale/unknown run id (e.g. left in localStorage after a restart) — don't 500 the
+    // page load; tell the client there's nothing to resume.
+    console.error("[reconnect] cannot resume run", runId, e);
+    return new Response(null, { status: 204 });
+  }
 }
