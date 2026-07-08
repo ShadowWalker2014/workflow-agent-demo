@@ -5,7 +5,7 @@
 // generation; we're on ai@7). Instead we own the ai@7 useChat + WorkflowChatTransport
 // and feed it into assistant-ui via useExternalStoreRuntime — so durable resume is kept.
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { WorkflowChatTransport } from "@ai-sdk/workflow";
 import {
@@ -13,6 +13,7 @@ import {
   useRemoteThreadListRuntime,
   InMemoryThreadListAdapter,
   useThreadListItem,
+  useThreadListItemRuntime,
   CompositeAttachmentAdapter,
   SimpleImageAttachmentAdapter,
   SimpleTextAttachmentAdapter,
@@ -77,6 +78,22 @@ function useThreadRuntime(chatId: string) {
   );
 
   const chat = useChat<UIMessage>({ id: chatId, transport, resume: Boolean(activeRun) });
+
+  // Auto-name the thread from its first user message (once) so the sidebar isn't all "New Chat".
+  const item = useThreadListItem();
+  const itemRuntime = useThreadListItemRuntime();
+  useEffect(() => {
+    if (item.title) return;
+    const firstUser = chat.messages.find((m) => m.role === "user");
+    if (!firstUser) return;
+    const title = firstUser.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as { text: string }).text)
+      .join(" ")
+      .trim()
+      .slice(0, 60);
+    if (title) itemRuntime.rename(title);
+  }, [chat.messages, item.title, itemRuntime]);
 
   return useExternalStoreRuntime({
     isRunning: chat.status === "streaming" || chat.status === "submitted",

@@ -191,12 +191,32 @@ const ThreadWelcome: FC = () => {
   );
 };
 
+const WELCOME_SUGGESTIONS = [
+  "What's the latest news about Vercel? Cite sources.",
+  "Research the Workflow DevKit and summarize it as a card",
+  "What is 8231 × 47?",
+  "Schedule a reminder to ship the demo tomorrow at 9am",
+];
+
 const ThreadSuggestions: FC = () => {
   return (
     <div className="aui-thread-welcome-suggestions flex w-full flex-wrap items-center justify-center gap-2 px-4">
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
+      {WELCOME_SUGGESTIONS.map((prompt) => (
+        <ThreadPrimitive.Suggestion
+          key={prompt}
+          prompt={prompt}
+          method="replace"
+          send
+          render={
+            <Button
+              variant="ghost"
+              className="aui-thread-welcome-suggestion text-foreground hover:bg-muted border-border/60 h-auto gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-normal whitespace-nowrap transition-colors"
+            >
+              {prompt}
+            </Button>
+          }
+        />
+      ))}
     </div>
   );
 };
