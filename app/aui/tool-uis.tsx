@@ -7,6 +7,7 @@
 
 import { makeAssistantToolUI } from "@assistant-ui/react";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import {
   ClockIcon,
   CalculatorIcon,
@@ -143,6 +144,38 @@ export const ResearchToolUI = makeAssistantToolUI<
   },
 });
 
+// HITL: the ask_for_confirmation client tool. addResult() supplies the human's answer and
+// localRuntime re-runs the adapter with it, so the backend continues (or not).
+export const AskForConfirmationToolUI = makeAssistantToolUI<
+  { message?: string },
+  { approved?: boolean }
+>({
+  toolName: "ask_for_confirmation",
+  render: ({ args, result, addResult }) => {
+    if (result === undefined) {
+      return (
+        <div className="my-2 rounded-lg border p-3">
+          <div className="mb-2 text-sm font-medium">Approval needed</div>
+          <div className="text-muted-foreground mb-3 text-sm">{args?.message ?? "Proceed with this action?"}</div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => addResult({ approved: false })}>
+              Decline
+            </Button>
+            <Button size="sm" onClick={() => addResult({ approved: true })}>
+              Approve
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="text-muted-foreground my-2 rounded-lg border px-3 py-2 text-sm">
+        {result.approved ? "✓ Approved" : "✗ Declined"}
+      </div>
+    );
+  },
+});
+
 export function ToolUIs() {
   return (
     <>
@@ -152,6 +185,7 @@ export function ToolUIs() {
       <WebSearchToolUI />
       <RenderWidgetToolUI />
       <ResearchToolUI />
+      <AskForConfirmationToolUI />
     </>
   );
 }
