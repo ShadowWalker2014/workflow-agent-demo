@@ -13,10 +13,13 @@ export default function AuiPage() {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       {/* Collapsible sidebar — assistant-ui's design uses the shadcn default "offcanvas"
-          (slides fully away). Toggle: the rail, <SidebarTrigger/>, or ⌘/Ctrl+B. */}
-      <SidebarProvider>
+          (slides fully away). Toggle: the rail, <SidebarTrigger/>, or ⌘/Ctrl+B.
+          h-dvh + overflow-hidden: SidebarProvider is `min-h-svh` (grows) by default, which
+          leaves Thread's viewport unbounded so its scroll-anchoring reserves runaway empty
+          space on later turns. Pin the height so only the thread viewport scrolls. */}
+      <SidebarProvider className="h-dvh overflow-hidden">
         <ThreadListSidebar />
-        <SidebarInset className="min-w-0">
+        <SidebarInset className="min-h-0 min-w-0">
           <SidebarTrigger className="absolute top-3 left-3 z-10" />
           <Thread />
         </SidebarInset>
