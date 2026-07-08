@@ -96,15 +96,14 @@ function useThreadRuntime(chatId: string) {
     [transport, chatId],
   );
 
-  return useLocalRuntime({
-    model: adapter,
+  return useLocalRuntime(adapter, {
     adapters: {
       attachments: new CompositeAttachmentAdapter([
         new SimpleImageAttachmentAdapter(),
         new SimpleTextAttachmentAdapter(),
       ]),
     },
-  } as any);
+  });
 }
 
 function ThreadRuntimeHook() {
