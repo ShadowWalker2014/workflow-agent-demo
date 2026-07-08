@@ -41,14 +41,23 @@ function toThreadMessage(m: UIMessage): ThreadMessageLike {
       if (mime.startsWith("image/")) content.push({ type: "image", image: url });
       else content.push({ type: "file", filename: p.filename, mimeType: mime, data: url });
     }
-    else if (p.type.startsWith("tool-") || p.type === "dynamic-tool")
+    else if (p.type.startsWith("tool-") || p.type === "dynamic-tool") {
+      const toolName = (p.toolName as string) ?? p.type.replace(/^tool-/, "");
       content.push({
         type: "tool-call",
         toolCallId: String(p.toolCallId ?? ""),
-        toolName: p.toolName ?? p.type.replace(/^tool-/, ""),
+        toolName,
         args: p.input ?? {},
         result: p.output,
       });
+      // web_search results → assistant-ui "source" parts (Sources UI).
+      if (toolName === "web_search" && Array.isArray(p.output)) {
+        for (const r of p.output as Array<{ title?: string; url?: string }>) {
+          if (r?.url)
+            content.push({ type: "source", sourceType: "url", id: r.url, url: r.url, title: r.title });
+        }
+      }
+    }
   }
   if (content.length === 0) content.push({ type: "text", text: "" });
   return { role: m.role, id: m.id, content } as unknown as ThreadMessageLike;
