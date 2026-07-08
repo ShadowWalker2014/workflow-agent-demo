@@ -57,19 +57,12 @@ function uiPartsToContent(msg: UIMessage): any[] {
       else content.push({ type: "file", filename: p.filename, mimeType: p.mediaType, data: p.url });
     } else if (typeof p.type === "string" && (p.type.startsWith("tool-") || p.type === "dynamic-tool")) {
       const toolName = p.toolName ?? p.type.replace(/^tool-/, "");
-      const out = p.output;
       content.push({
         type: "tool-call",
         toolCallId: p.toolCallId,
         toolName,
         args: p.input ?? {},
-        result: out,
-        // Multi-agent: if the tool output carries a subagent conversation (research), expose
-        // it as ToolCallMessagePart.messages so the UI renders a nested read-only thread
-        // (https://www.assistant-ui.com/docs/tools/multi-agent).
-        ...(out && typeof out === "object" && Array.isArray((out as any).messages)
-          ? { messages: (out as any).messages }
-          : {}),
+        result: p.output,
       });
       // NOTE: assistant-ui's <Sources> renders native model-emitted `source-url` parts.
       // Our web_search is a TOOL, so results appear via the WebSearchToolUI card + the

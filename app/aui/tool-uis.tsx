@@ -5,10 +5,10 @@
 // raw ToolFallback. Mount these inside <AssistantRuntimeProvider>. Display-only — works
 // with useExternalStoreRuntime.
 
-import { makeAssistantToolUI, MessagePartPrimitive, MessagePrimitive } from "@assistant-ui/react";
+import { makeAssistantToolUI } from "@assistant-ui/react";
 import type { ReactNode } from "react";
+import { Streamdown } from "streamdown";
 import { Button } from "@/components/ui/button";
-import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import {
   ClockIcon,
   CalculatorIcon,
@@ -103,30 +103,15 @@ export const RenderWidgetToolUI = makeAssistantToolUI<{ title?: string; points?:
   ),
 });
 
-// Nested subagent messages (rendered inside the research tool via MessagePartPrimitive.Messages).
-// Registered tool UIs are inherited here (scope inheritance), so the subagent's web_search
-// calls render with the same WebSearchToolUI card as the main thread.
-const SubUserMessage = () => (
-  <MessagePrimitive.Root data-role="user" className="mb-2">
-    <div className="bg-muted text-foreground inline-block rounded-lg px-3 py-1.5 text-sm">
-      <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
-    </div>
-  </MessagePrimitive.Root>
-);
-
-const SubAssistantMessage = () => (
-  <MessagePrimitive.Root data-role="assistant" className="text-foreground text-sm leading-relaxed">
-    <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
-  </MessagePrimitive.Root>
-);
-
-// Multi-agent (https://www.assistant-ui.com/docs/tools/multi-agent): the `research` tool is a
-// sub-agent. Its result carries a `messages` array (ToolCallMessagePart.messages) which we
-// render as a nested, read-only "Researcher agent" thread — its web searches, then its
-// cited briefing — instead of a flat card.
-export const ResearchToolUI = makeAssistantToolUI<{ topic?: string }, { answer?: string }>({
+// Multi-agent: the `research` tool is a sub-agent (its own context + web search). Rendered
+// via the documented makeAssistantToolUI mechanism (https://www.assistant-ui.com/docs/tools/tool-ui)
+// as a "Researcher agent" card: the queries it ran, then its cited briefing.
+export const ResearchToolUI = makeAssistantToolUI<
+  { topic?: string },
+  { topic?: string; plan?: string[]; briefing?: string }
+>({
   toolName: "research",
-  render: ({ args, status }) => {
+  render: ({ args, result, status }) => {
     const running = status.type === "running";
     return (
       <div className="my-2 rounded-lg border p-3">
@@ -134,18 +119,29 @@ export const ResearchToolUI = makeAssistantToolUI<{ topic?: string }, { answer?:
           {running ? <Loader2Icon className="size-4 animate-spin" /> : <FlaskConicalIcon className="size-4" />}
           Researcher agent{running ? " · working…" : ""}
         </div>
-        <div className="ml-1 border-l pl-3">
-          {running && (
-            <div className="text-muted-foreground text-sm">
-              <span className="text-muted-foreground">Topic: </span>
-              {args?.topic}
+        <div className="ml-1 space-y-2 border-l pl-3">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Topic: </span>
+            {result?.topic ?? args?.topic}
+          </div>
+          {result?.plan && result.plan.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {result.plan.map((q, i) => (
+                <span
+                  key={i}
+                  className="text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+                >
+                  <SearchIcon className="size-3" />
+                  {q}
+                </span>
+              ))}
             </div>
           )}
-          <MessagePartPrimitive.Messages>
-            {({ message }) =>
-              message.role === "user" ? <SubUserMessage /> : <SubAssistantMessage />
-            }
-          </MessagePartPrimitive.Messages>
+          {result?.briefing && (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+              <Streamdown>{result.briefing}</Streamdown>
+            </div>
+          )}
         </div>
       </div>
     );
