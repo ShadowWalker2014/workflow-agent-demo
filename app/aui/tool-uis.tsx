@@ -5,10 +5,16 @@
 // raw ToolFallback. Mount these inside <AssistantRuntimeProvider>. Display-only — works
 // with useExternalStoreRuntime.
 
-import { makeAssistantToolUI } from "@assistant-ui/react";
+import {
+  makeAssistantToolUI,
+  ReadonlyThreadProvider,
+  ThreadPrimitive,
+  MessagePrimitive,
+  type ThreadMessage,
+} from "@assistant-ui/react";
 import type { ReactNode } from "react";
-import { Streamdown } from "streamdown";
 import { Button } from "@/components/ui/button";
+import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import {
   ClockIcon,
   CalculatorIcon,
@@ -103,44 +109,89 @@ export const RenderWidgetToolUI = makeAssistantToolUI<{ title?: string; points?:
   ),
 });
 
-// Multi-agent: the `research` tool is a sub-agent (its own context + web search). Rendered
-// via the documented makeAssistantToolUI mechanism (https://www.assistant-ui.com/docs/tools/tool-ui)
-// as a "Researcher agent" card: the queries it ran, then its cited briefing.
-export const ResearchToolUI = makeAssistantToolUI<
-  { topic?: string },
-  { topic?: string; plan?: string[]; briefing?: string }
->({
+// Nested subagent thread messages, rendered by ThreadPrimitive.Messages inside a
+// ReadonlyThreadProvider. Tool-UI registrations are inherited (scope inheritance), so the
+// subagent's web_search calls reuse WebSearchToolUI, and text renders as markdown.
+const SubUserMessage = () => (
+  <MessagePrimitive.Root className="mb-2">
+    <div className="bg-muted text-foreground inline-block rounded-lg px-3 py-1.5 text-sm">
+      <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+    </div>
+  </MessagePrimitive.Root>
+);
+
+const SubAssistantMessage = () => (
+  <MessagePrimitive.Root className="text-foreground mb-2 text-sm leading-relaxed">
+    <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+  </MessagePrimitive.Root>
+);
+
+type ResearchResult = {
+  topic?: string;
+  searches?: { toolCallId: string; query: string; results?: unknown }[];
+  briefing?: string;
+};
+
+// Rebuild the subagent's conversation as assistant-ui ThreadMessage[] (shape per docs' Runtime
+// Types): a user turn (the topic) + an assistant turn (its web_search tool calls, then briefing).
+function buildSubThread(result: ResearchResult): ThreadMessage[] {
+  const now = new Date();
+  const searchParts = (result.searches ?? []).map((s) => ({
+    type: "tool-call" as const,
+    toolCallId: s.toolCallId,
+    toolName: "web_search",
+    args: { query: s.query },
+    argsText: JSON.stringify({ query: s.query }),
+    result: s.results,
+  }));
+  return [
+    {
+      id: "sub-user",
+      role: "user",
+      content: [{ type: "text", text: `Research: ${result.topic ?? ""}` }],
+      createdAt: now,
+    },
+    {
+      id: "sub-assistant",
+      role: "assistant",
+      status: { type: "complete", reason: "stop" },
+      createdAt: now,
+      content: [
+        ...searchParts,
+        ...(result.briefing ? [{ type: "text" as const, text: result.briefing }] : []),
+      ],
+    },
+  ] as unknown as ThreadMessage[];
+}
+
+// Multi-agent (https://www.assistant-ui.com/docs/tools/multi-agent): the `research` tool is a
+// sub-agent. Render its conversation as a nested, read-only "Researcher agent" thread via
+// ReadonlyThreadProvider + ThreadPrimitive.Messages — its web searches, then its cited briefing.
+export const ResearchToolUI = makeAssistantToolUI<{ topic?: string }, ResearchResult>({
   toolName: "research",
   render: ({ args, result, status }) => {
     const running = status.type === "running";
+    const messages = result ? buildSubThread(result) : [];
     return (
       <div className="my-2 rounded-lg border p-3">
         <div className="text-muted-foreground mb-2 flex items-center gap-2 text-sm font-medium">
           {running ? <Loader2Icon className="size-4 animate-spin" /> : <FlaskConicalIcon className="size-4" />}
           Researcher agent{running ? " · working…" : ""}
         </div>
-        <div className="ml-1 space-y-2 border-l pl-3">
-          <div className="text-sm">
-            <span className="text-muted-foreground">Topic: </span>
-            {result?.topic ?? args?.topic}
-          </div>
-          {result?.plan && result.plan.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {result.plan.map((q, i) => (
-                <span
-                  key={i}
-                  className="text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
-                >
-                  <SearchIcon className="size-3" />
-                  {q}
-                </span>
-              ))}
+        <div className="ml-1 border-l pl-3">
+          {messages.length === 0 ? (
+            <div className="text-muted-foreground text-sm">
+              <span className="text-muted-foreground">Topic: </span>
+              {result?.topic ?? args?.topic}
             </div>
-          )}
-          {result?.briefing && (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
-              <Streamdown>{result.briefing}</Streamdown>
-            </div>
+          ) : (
+            <ReadonlyThreadProvider messages={messages}>
+              <ThreadPrimitive.Messages>
+                {({ message }) =>
+                  message.role === "user" ? <SubUserMessage /> : <SubAssistantMessage />
+                }
+              </ThreadPrimitive.Messages>
+            </ReadonlyThreadProvider>
           )}
         </div>
       </div>

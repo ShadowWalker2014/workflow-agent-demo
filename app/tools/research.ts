@@ -3,17 +3,20 @@ import { z } from "zod";
 import Exa from "exa-js";
 
 // SUBAGENT (agent-as-tool): a nested LLM tool-loop with its own context + web search.
-// Returns its search queries (`plan`) + cited briefing. The frontend renders this via the
-// documented makeAssistantToolUI mechanism (https://www.assistant-ui.com/docs/tools/tool-ui).
+// Returns its conversation pieces (each web search + the cited briefing) so the frontend can
+// render a nested read-only thread via ReadonlyThreadProvider + ThreadPrimitive.Messages
+// (https://www.assistant-ui.com/docs/tools/multi-agent).
 async function research({ topic }: { topic: string }) {
   "use step";
   const exa = new Exa(process.env.EXA_API_KEY!);
   const result = await generateText({
     model: "anthropic/claude-sonnet-4.5",
     system:
-      "You are a research subagent. Investigate the topic using the search tool and return a tight, cited briefing.",
+      "You are a research subagent. Run 2-4 focused web searches (never more), then STOP searching and write a tight, cited briefing. Cite inline with numbered markdown links to the exact source URLs. Your final message MUST be the briefing text — do not end on a tool call.",
     prompt: `Research: ${topic}`,
-    stopWhen: stepCountIs(4),
+    // 5 steps leaves room for a final synthesis turn after the searches, so the subagent's
+    // own briefing lands in its conversation (rendered inside the nested Researcher card).
+    stopWhen: stepCountIs(5),
     tools: {
       search: tool({
         description: "Search the web.",
@@ -26,12 +29,18 @@ async function research({ topic }: { topic: string }) {
     },
   });
 
-  // The sub-queries the subagent ran (its "plan"); briefing is its cited answer.
-  const plan = result.steps
-    .flatMap((s) => s.toolCalls)
-    .filter((c) => c.toolName === "search")
-    .map((c) => (c.input as { query: string }).query);
-  return { topic, plan, briefing: result.text };
+  // Each web search the subagent ran (query + results), paired via toolCallId, so the UI can
+  // rebuild the subagent's conversation as ThreadMessages.
+  const searches = result.steps.flatMap((step) =>
+    (step.toolCalls ?? [])
+      .filter((c) => c.toolName === "search")
+      .map((c) => ({
+        toolCallId: c.toolCallId,
+        query: (c.input as { query: string }).query,
+        results: (step.toolResults ?? []).find((r) => r.toolCallId === c.toolCallId)?.output ?? [],
+      })),
+  );
+  return { topic, searches, briefing: result.text };
 }
 
 export const researchTool = tool({
