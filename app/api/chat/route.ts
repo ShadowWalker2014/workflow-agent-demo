@@ -8,10 +8,18 @@ import { createMergedTransform } from "./transform";
 // server-side even if the browser disconnects; `x-workflow-run-id` lets
 // WorkflowChatTransport reconnect to it on refresh (see [runId]/stream).
 export async function POST(req: Request) {
-  const { messages, model }: { messages: UIMessage[]; model?: string } = await req.json();
+  const {
+    messages,
+    model,
+    clientTools,
+  }: {
+    messages: UIMessage[];
+    model?: string;
+    clientTools?: Array<{ name: string; description?: string; parameters?: unknown }>;
+  } = await req.json();
   const modelMessages = await convertToModelMessages(messages);
 
-  const run = await start(chatWorkflow, [modelMessages, model]);
+  const run = await start(chatWorkflow, [modelMessages, model, clientTools]);
 
   return createUIMessageStreamResponse({
     // Stable assistant message id = msg-<runId>, so a resumed replay reconciles.

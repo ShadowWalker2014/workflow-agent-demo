@@ -1,14 +1,22 @@
 import { WorkflowAgent, type ModelCallStreamPart } from "@ai-sdk/workflow";
 import { getWritable } from "workflow";
-import { stepCountIs, type ModelMessage } from "ai";
+import { stepCountIs, tool, jsonSchema, type ModelMessage } from "ai";
 import { buildTools, CORE_TOOLS, DEFERRED_CATALOG } from "@/app/tools/registry";
+
+// Client-provided tools (e.g. assistant-ui interactables' auto-generated update_* tools).
+// Registered with NO execute — the run stops on the call and the browser resolves it.
+type ClientTool = { name: string; description?: string; parameters?: unknown };
 
 // High extended-thinking budget for Claude (interleaved with tool use). Kept
 // under both models' output ceilings so it never 400s (Opus 4.1 caps at 32k out).
 const THINKING_BUDGET_HIGH = 16_000;
 const MAX_OUTPUT_TOKENS = 32_000;
 
-export async function chatWorkflow(messages: ModelMessage[], model?: string) {
+export async function chatWorkflow(
+  messages: ModelMessage[],
+  model?: string,
+  clientTools?: ClientTool[],
+) {
   "use workflow";
 
   const selectedModel = model || "anthropic/claude-sonnet-4.5";
@@ -16,7 +24,19 @@ export async function chatWorkflow(messages: ModelMessage[], model?: string) {
 
   const writable = getWritable<ModelCallStreamPart>();
 
-  const tools = buildTools();
+  // Register any client tools (no execute) alongside the curated toolset. Empty by default.
+  const clientToolNames = (clientTools ?? []).map((t) => t.name);
+  const clientToolEntries = (clientTools ?? []).map(
+    (t) =>
+      [
+        t.name,
+        tool({
+          description: t.description ?? t.name,
+          inputSchema: jsonSchema((t.parameters as object) ?? { type: "object", properties: {} }),
+        }),
+      ] as const,
+  );
+  const tools = { ...buildTools(), ...Object.fromEntries(clientToolEntries) };
 
   const catalog = Object.entries(DEFERRED_CATALOG)
     .map(([n, d]) => `  - ${n}: ${d}`)
@@ -50,7 +70,7 @@ export async function chatWorkflow(messages: ModelMessage[], model?: string) {
     // step on the REAL model (never on a shared call-level base) so it can't leak
     // onto a model that 400s on it.
     prepareStep: async ({ messages: stepMessages }: { messages: ModelMessage[] }) => ({
-      activeTools: [...CORE_TOOLS, ...unlockedFrom(stepMessages)],
+      activeTools: [...CORE_TOOLS, ...unlockedFrom(stepMessages), ...clientToolNames],
       ...(isAnthropic
         ? {
             maxOutputTokens: MAX_OUTPUT_TOKENS,

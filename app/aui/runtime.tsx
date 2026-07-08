@@ -64,9 +64,10 @@ function uiPartsToContent(msg: UIMessage): any[] {
         args: p.input ?? {},
         result: p.output,
       });
-      if (toolName === "web_search" && Array.isArray(p.output))
-        for (const r of p.output as Array<{ title?: string; url?: string }>)
-          if (r?.url) content.push({ type: "source", sourceType: "url", id: r.url, url: r.url, title: r.title });
+      // NOTE: assistant-ui's <Sources> renders native model-emitted `source-url` parts.
+      // Our web_search is a TOOL, so results appear via the WebSearchToolUI card + the
+      // model's inline citation links ([1](url)) that MarkdownText renders. Synthesizing
+      // "source" content parts here rendered as empty pills, so we don't.
     }
   }
   return content;
@@ -77,7 +78,17 @@ function useThreadRuntime(chatId: string) {
 
   const adapter = useMemo<ChatModelAdapter>(
     () => ({
-      async *run({ messages, abortSignal }) {
+      async *run({ messages, abortSignal, context }) {
+        // Forward client-registered tools (e.g. interactables' update_* tools) so the
+        // backend can offer them to the model.
+        const ctxTools = (context as any)?.tools;
+        const clientTools = ctxTools
+          ? Object.entries(ctxTools as Record<string, any>).map(([name, t]) => ({
+              name,
+              description: t?.description,
+              parameters: t?.parameters,
+            }))
+          : [];
         const chunkStream = await transport.sendMessages({
           trigger: "submit-message",
           chatId,
@@ -86,7 +97,7 @@ function useThreadRuntime(chatId: string) {
           abortSignal,
           metadata: undefined,
           headers: undefined,
-          body: { model: MODEL, chatId },
+          body: { model: MODEL, chatId, ...(clientTools.length ? { clientTools } : {}) },
         } as any);
         for await (const uiMessage of readUIMessageStream({ stream: chunkStream })) {
           yield { content: uiPartsToContent(uiMessage) };
