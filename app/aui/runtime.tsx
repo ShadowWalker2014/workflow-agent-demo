@@ -79,7 +79,10 @@ function useThreadRuntime(chatId: string) {
 
   const chat = useChat<UIMessage>({ id: chatId, transport, resume: Boolean(activeRun) });
 
-  // Auto-name the thread from its first user message (once) so the sidebar isn't all "New Chat".
+  // Auto-name the thread from its first user message so the sidebar isn't all "New Chat".
+  // The thread list item may not be initialized on the first render where the user message
+  // appears, so guard the rename — the effect re-runs on the next message update (e.g. the
+  // assistant's reply) by which point the thread exists.
   const item = useThreadListItem();
   const itemRuntime = useThreadListItemRuntime();
   useEffect(() => {
@@ -92,7 +95,12 @@ function useThreadRuntime(chatId: string) {
       .join(" ")
       .trim()
       .slice(0, 60);
-    if (title) itemRuntime.rename(title);
+    if (!title) return;
+    try {
+      itemRuntime.rename(title);
+    } catch {
+      // thread not initialized yet — will retry on the next message update
+    }
   }, [chat.messages, item.title, itemRuntime]);
 
   return useExternalStoreRuntime({
