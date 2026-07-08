@@ -10,11 +10,14 @@ import {
   ReadonlyThreadProvider,
   ThreadPrimitive,
   MessagePrimitive,
+  groupPartByType,
   type ThreadMessage,
 } from "@assistant-ui/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+import { ToolGroupContent, ToolGroupRoot, ToolGroupTrigger } from "@/components/assistant-ui/tool-group";
 import {
   ClockIcon,
   CalculatorIcon,
@@ -120,9 +123,30 @@ const SubUserMessage = () => (
   </MessagePrimitive.Root>
 );
 
+// Collapse the subagent's (potentially many) web searches into one expandable "N tool calls"
+// ToolGroup — same pattern the main thread uses — so the nested card stays compact and
+// inspectable instead of dumping every search row. The briefing text renders below as markdown.
 const SubAssistantMessage = () => (
   <MessagePrimitive.Root className="text-foreground mb-2 text-sm leading-relaxed">
-    <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+    <MessagePrimitive.GroupedParts groupBy={groupPartByType({ "tool-call": ["group-tool"] })}>
+      {({ part, children }) => {
+        switch (part.type) {
+          case "group-tool":
+            return (
+              <ToolGroupRoot variant="ghost">
+                <ToolGroupTrigger count={part.indices.length} active={part.status.type === "running"} />
+                <ToolGroupContent>{children}</ToolGroupContent>
+              </ToolGroupRoot>
+            );
+          case "tool-call":
+            return part.toolUI ?? <ToolFallback {...part} />;
+          case "text":
+            return <MarkdownText />;
+          default:
+            return null;
+        }
+      }}
+    </MessagePrimitive.GroupedParts>
   </MessagePrimitive.Root>
 );
 
