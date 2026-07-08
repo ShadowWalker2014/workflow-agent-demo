@@ -309,11 +309,16 @@ const AssistantMessage: FC = () => {
         className="text-foreground px-2 leading-relaxed wrap-break-word [contain-intrinsic-size:auto_24px] [content-visibility:auto]"
       >
         <MessagePrimitive.GroupedParts
-          groupBy={groupPartByType({
-            reasoning: ["group-chainOfThought", "group-reasoning"],
-            "tool-call": ["group-chainOfThought", "group-tool"],
-            "standalone-tool-call": [],
-          })}
+          groupBy={(part: { type: string; toolName?: string }) => {
+            if (part.type === "reasoning") return ["group-chainOfThought", "group-reasoning"];
+            if (part.type === "tool-call") {
+              // HITL: keep the approval tool OUT of the collapsible group so its
+              // Approve/Decline buttons are always visible.
+              if (part.toolName === "ask_for_confirmation") return [];
+              return ["group-chainOfThought", "group-tool"];
+            }
+            return [];
+          }}
         >
           {({ part, children }) => {
             switch (part.type) {
