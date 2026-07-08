@@ -33,8 +33,14 @@ function toThreadMessage(m: UIMessage): ThreadMessageLike {
     const p = part as Record<string, unknown> & { type: string };
     if (p.type === "text") content.push({ type: "text", text: String(p.text ?? "") });
     else if (p.type === "reasoning") content.push({ type: "reasoning", text: String(p.text ?? "") });
-    else if (p.type === "file")
-      content.push({ type: "file", filename: p.filename, mimeType: p.mediaType, data: String(p.url ?? "") });
+    else if (p.type === "file") {
+      const url = String(p.url ?? "");
+      const mime = String(p.mediaType ?? "");
+      // Render images as compact <img>; a generic "file" part would dump the base64 data
+      // URL as text and make the message enormous.
+      if (mime.startsWith("image/")) content.push({ type: "image", image: url });
+      else content.push({ type: "file", filename: p.filename, mimeType: mime, data: url });
+    }
     else if (p.type.startsWith("tool-") || p.type === "dynamic-tool")
       content.push({
         type: "tool-call",
@@ -108,27 +114,28 @@ function useThreadRuntime(chatId: string) {
     messages: chat.messages,
     convertMessage: toThreadMessage,
     onNew: async (msg: AppendMessage) => {
-      const text = msg.content
+      let text = msg.content
         .filter((c): c is { type: "text"; text: string } => c.type === "text")
         .map((c) => c.text)
         .join("");
-      const files = (msg.attachments ?? []).flatMap((a) =>
-        (a.content ?? [])
-          .map((c) => {
-            const part = c as Record<string, unknown> & { type: string };
-            if (part.type === "image")
-              return { type: "file", url: String(part.image ?? ""), mediaType: "image/png", filename: a.name };
-            if (part.type === "file")
-              return {
-                type: "file",
-                url: String(part.data ?? ""),
-                mediaType: (part.mimeType as string) ?? "application/octet-stream",
-                filename: a.name,
-              };
-            return null;
-          })
-          .filter(Boolean),
-      );
+      const files: Array<Record<string, unknown>> = [];
+      for (const a of msg.attachments ?? []) {
+        for (const c of (a.content ?? []) as Array<Record<string, unknown> & { type: string }>) {
+          if (c.type === "image")
+            files.push({ type: "file", url: String(c.image ?? ""), mediaType: "image/png", filename: a.name });
+          else if (c.type === "file")
+            files.push({
+              type: "file",
+              url: String(c.data ?? ""),
+              mediaType: (c.mimeType as string) ?? "application/octet-stream",
+              filename: a.name,
+            });
+          // Text/code files: the text adapter inlines their content — fold it into the
+          // message so the model actually receives it (otherwise it "sees no file").
+          else if (c.type === "text")
+            text += `\n\n--- Attached file: ${a.name} ---\n${String(c.text ?? "")}`;
+        }
+      }
       await chat.sendMessage(
         { text, ...(files.length ? { files: files as never } : {}) },
         { body: { model: MODEL } },

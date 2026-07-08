@@ -12,9 +12,10 @@ export default function AuiPage() {
   const runtime = useWorkflowAssistantRuntime();
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      {/* Collapsible sidebar (shadcn Sidebar shell). Toggle: the rail, <SidebarTrigger/>, or ⌘/Ctrl+B. */}
+      {/* Collapsible sidebar — assistant-ui's design uses the shadcn default "offcanvas"
+          (slides fully away). Toggle: the rail, <SidebarTrigger/>, or ⌘/Ctrl+B. */}
       <SidebarProvider>
-        <ThreadListSidebar collapsible="icon" />
+        <ThreadListSidebar />
         <SidebarInset className="min-w-0">
           <SidebarTrigger className="absolute top-3 left-3 z-10" />
           <Thread />
