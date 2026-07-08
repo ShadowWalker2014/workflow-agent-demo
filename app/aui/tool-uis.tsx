@@ -7,7 +7,14 @@
 
 import { makeAssistantToolUI } from "@assistant-ui/react";
 import type { ReactNode } from "react";
-import { ClockIcon, CalculatorIcon, BellIcon, SearchIcon, Loader2Icon } from "lucide-react";
+import {
+  ClockIcon,
+  CalculatorIcon,
+  BellIcon,
+  SearchIcon,
+  Loader2Icon,
+  FlaskConicalIcon,
+} from "lucide-react";
 
 function ToolCard({
   icon,
@@ -94,6 +101,48 @@ export const RenderWidgetToolUI = makeAssistantToolUI<{ title?: string; points?:
   ),
 });
 
+// Multi-agent: the `research` tool is itself a sub-agent. Render its activity as a nested,
+// read-only "Researcher agent" conversation (its search queries + cited briefing).
+export const ResearchToolUI = makeAssistantToolUI<
+  { topic?: string },
+  { topic?: string; plan?: string[]; briefing?: string }
+>({
+  toolName: "research",
+  render: ({ args, result, status }) => {
+    const running = status.type === "running";
+    return (
+      <div className="my-2 rounded-lg border p-3">
+        <div className="text-muted-foreground mb-2 flex items-center gap-2 text-sm font-medium">
+          {running ? <Loader2Icon className="size-4 animate-spin" /> : <FlaskConicalIcon className="size-4" />}
+          Researcher agent{running ? " · working…" : ""}
+        </div>
+        <div className="ml-1 space-y-2 border-l pl-3">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Topic: </span>
+            {result?.topic ?? args?.topic}
+          </div>
+          {result?.plan && result.plan.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {result.plan.map((q, i) => (
+                <span
+                  key={i}
+                  className="text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+                >
+                  <SearchIcon className="size-3" />
+                  {q}
+                </span>
+              ))}
+            </div>
+          )}
+          {result?.briefing && (
+            <div className="text-sm leading-relaxed whitespace-pre-wrap">{result.briefing}</div>
+          )}
+        </div>
+      </div>
+    );
+  },
+});
+
 export function ToolUIs() {
   return (
     <>
@@ -102,6 +151,7 @@ export function ToolUIs() {
       <ScheduleReminderToolUI />
       <WebSearchToolUI />
       <RenderWidgetToolUI />
+      <ResearchToolUI />
     </>
   );
 }
