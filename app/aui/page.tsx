@@ -6,6 +6,7 @@ import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar"
 import { Thread } from "@/components/assistant-ui/thread";
 import { useWorkflowAssistantRuntime } from "./runtime";
 import { ToolUIs } from "./tool-uis";
+import { QueueProvider } from "./queue";
 
 // assistant-ui variant of the demo — same durable WorkflowAgent backend, different UI
 // framework, for side-by-side comparison with the AI Elements build at /c/<id>.
@@ -23,7 +24,9 @@ export default function AuiPage() {
         <ThreadListSidebar />
         <SidebarInset className="min-h-0 min-w-0">
           <SidebarTrigger className="absolute top-3 left-3 z-10" />
-          <Thread />
+          <QueueProvider>
+            <Thread />
+          </QueueProvider>
         </SidebarInset>
       </SidebarProvider>
     </AssistantRuntimeProvider>
