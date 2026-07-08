@@ -14,12 +14,6 @@ import {
   ReasoningText,
   ReasoningTrigger,
 } from "@/components/assistant-ui/reasoning";
-// Use the AI Elements Reasoning component instead of assistant-ui's for reasoning parts.
-import {
-  Reasoning as AiReasoning,
-  ReasoningTrigger as AiReasoningTrigger,
-  ReasoningContent as AiReasoningContent,
-} from "@/components/ai-elements/reasoning";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import {
   ToolGroupContent,
@@ -312,8 +306,7 @@ const AssistantMessage: FC = () => {
       >
         <MessagePrimitive.GroupedParts
           groupBy={groupPartByType({
-            // reasoning is rendered per-part with the AI Elements <Reasoning> (below),
-            // so it is intentionally NOT grouped here.
+            reasoning: ["group-chainOfThought", "group-reasoning"],
             "tool-call": ["group-chainOfThought", "group-tool"],
             "standalone-tool-call": [],
           })}
@@ -343,7 +336,7 @@ const AssistantMessage: FC = () => {
                 }
                 const running = part.status.type === "running";
                 return (
-                  <ReasoningRoot streaming={running}>
+                  <ReasoningRoot variant="ghost" streaming={running}>
                     <ReasoningTrigger active={running} />
                     <ReasoningContent aria-busy={running}>
                       <ReasoningText>{children}</ReasoningText>
@@ -353,15 +346,8 @@ const AssistantMessage: FC = () => {
               }
               case "text":
                 return <MarkdownText />;
-              case "reasoning": {
-                const rp = part as { text?: string; status?: { type?: string } };
-                return (
-                  <AiReasoning className="mb-4 w-full" isStreaming={rp.status?.type === "running"}>
-                    <AiReasoningTrigger />
-                    <AiReasoningContent>{rp.text ?? ""}</AiReasoningContent>
-                  </AiReasoning>
-                );
-              }
+              case "reasoning":
+                return <Reasoning {...part} />;
               case "tool-call":
                 return part.toolUI ?? <ToolFallbackComponent {...part} />;
               case "data":
