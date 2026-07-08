@@ -15,9 +15,18 @@ import {
 } from "@assistant-ui/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { ToolGroupContent, ToolGroupRoot, ToolGroupTrigger } from "@/components/assistant-ui/tool-group";
+import { ChevronRightIcon } from "lucide-react";
 import {
   ClockIcon,
   CalculatorIcon,
@@ -188,37 +197,70 @@ function buildSubThread(result: ResearchResult): ThreadMessage[] {
   ] as unknown as ThreadMessage[];
 }
 
+// The nested subagent thread (user turn + its searches + briefing), rendered read-only.
+const SubThread = ({ messages }: { messages: ThreadMessage[] }) => (
+  <ReadonlyThreadProvider messages={messages}>
+    <ThreadPrimitive.Messages>
+      {({ message }) =>
+        message.role === "user" ? <SubUserMessage /> : <SubAssistantMessage />
+      }
+    </ThreadPrimitive.Messages>
+  </ReadonlyThreadProvider>
+);
+
 // Multi-agent (https://www.assistant-ui.com/docs/tools/multi-agent): the `research` tool is a
-// sub-agent. Render its conversation as a nested, read-only "Researcher agent" thread via
-// ReadonlyThreadProvider + ThreadPrimitive.Messages — its web searches, then its cited briefing.
+// sub-agent. In the main thread it's a COMPACT card; the subagent's full conversation opens in
+// a modal for inspection (assistant-ui ships no subagent drawer, so we compose a Dialog around
+// ReadonlyThreadProvider + ThreadPrimitive.Messages). Keeps the main thread clean.
 export const ResearchToolUI = makeAssistantToolUI<{ topic?: string }, ResearchResult>({
   toolName: "research",
   render: ({ args, result, status }) => {
     const running = status.type === "running";
+    const topic = result?.topic ?? args?.topic ?? "";
+    const searchCount = result?.searches?.length ?? 0;
     const messages = result ? buildSubThread(result) : [];
+
+    // While the subagent runs there's nothing to inspect yet — show a non-interactive card.
+    if (running || messages.length === 0) {
+      return (
+        <div className="my-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+          <Loader2Icon className="size-4 shrink-0 animate-spin text-muted-foreground" />
+          <span className="shrink-0 font-medium whitespace-nowrap">Researcher agent</span>
+          <span className="text-muted-foreground min-w-0 flex-1 truncate">· {topic || "working…"}</span>
+        </div>
+      );
+    }
+
+    // Done: compact card is the modal trigger; the full nested thread opens in a Dialog.
     return (
-      <div className="my-2 rounded-lg border p-3">
-        <div className="text-muted-foreground mb-2 flex items-center gap-2 text-sm font-medium">
-          {running ? <Loader2Icon className="size-4 animate-spin" /> : <FlaskConicalIcon className="size-4" />}
-          Researcher agent{running ? " · working…" : ""}
-        </div>
-        <div className="ml-1 border-l pl-3">
-          {messages.length === 0 ? (
-            <div className="text-muted-foreground text-sm">
-              <span className="text-muted-foreground">Topic: </span>
-              {result?.topic ?? args?.topic}
-            </div>
-          ) : (
-            <ReadonlyThreadProvider messages={messages}>
-              <ThreadPrimitive.Messages>
-                {({ message }) =>
-                  message.role === "user" ? <SubUserMessage /> : <SubAssistantMessage />
-                }
-              </ThreadPrimitive.Messages>
-            </ReadonlyThreadProvider>
-          )}
-        </div>
-      </div>
+      <Dialog>
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            className="hover:bg-accent/50 my-2 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors"
+          >
+            <FlaskConicalIcon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="shrink-0 font-medium whitespace-nowrap">Researcher agent</span>
+            <span className="text-muted-foreground min-w-0 flex-1 truncate">· {topic}</span>
+            <span className="text-muted-foreground shrink-0 text-xs">
+              {searchCount} {searchCount === 1 ? "search" : "searches"}
+            </span>
+            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+        </DialogTrigger>
+        <DialogContent className="flex max-h-[80vh] flex-col gap-0 overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="flex-none">
+            <DialogTitle className="flex items-center gap-2">
+              <FlaskConicalIcon className="size-4" />
+              Researcher agent
+            </DialogTitle>
+            <DialogDescription className="truncate">{topic}</DialogDescription>
+          </DialogHeader>
+          <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6 py-2">
+            <SubThread messages={messages} />
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   },
 });
