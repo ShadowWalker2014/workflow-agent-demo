@@ -57,12 +57,19 @@ function uiPartsToContent(msg: UIMessage): any[] {
       else content.push({ type: "file", filename: p.filename, mimeType: p.mediaType, data: p.url });
     } else if (typeof p.type === "string" && (p.type.startsWith("tool-") || p.type === "dynamic-tool")) {
       const toolName = p.toolName ?? p.type.replace(/^tool-/, "");
+      const out = p.output;
       content.push({
         type: "tool-call",
         toolCallId: p.toolCallId,
         toolName,
         args: p.input ?? {},
-        result: p.output,
+        result: out,
+        // Multi-agent: if the tool output carries a subagent conversation (research), expose
+        // it as ToolCallMessagePart.messages so the UI renders a nested read-only thread
+        // (https://www.assistant-ui.com/docs/tools/multi-agent).
+        ...(out && typeof out === "object" && Array.isArray((out as any).messages)
+          ? { messages: (out as any).messages }
+          : {}),
       });
       // NOTE: assistant-ui's <Sources> renders native model-emitted `source-url` parts.
       // Our web_search is a TOOL, so results appear via the WebSearchToolUI card + the
@@ -99,8 +106,28 @@ function useThreadRuntime(chatId: string) {
           headers: undefined,
           body: { model: MODEL, chatId, ...(clientTools.length ? { clientTools } : {}) },
         } as any);
+        let last: UIMessage | undefined;
         for await (const uiMessage of readUIMessageStream({ stream: chunkStream })) {
+          last = uiMessage;
           yield { content: uiPartsToContent(uiMessage) };
+        }
+        // If the run stopped on an unresolved CLIENT tool (no output — e.g.
+        // ask_for_confirmation, or an interactable update_* tool), pause the run with
+        // requires-action so a tool UI's addResult() resumes it (localRuntime re-runs the
+        // adapter with the tool result → the backend continues). Otherwise addResult has no
+        // paused run to continue and "nothing happens".
+        const waiting = (last?.parts ?? []).some(
+          (p) =>
+            typeof (p as any).type === "string" &&
+            ((p as any).type.startsWith("tool-") || (p as any).type === "dynamic-tool") &&
+            (p as any).output === undefined &&
+            (p as any).state !== "output-error",
+        );
+        if (waiting && last) {
+          yield {
+            content: uiPartsToContent(last),
+            status: { type: "requires-action", reason: "interrupt" } as any,
+          };
         }
       },
     }),

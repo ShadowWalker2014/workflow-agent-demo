@@ -5,9 +5,10 @@
 // raw ToolFallback. Mount these inside <AssistantRuntimeProvider>. Display-only — works
 // with useExternalStoreRuntime.
 
-import { makeAssistantToolUI } from "@assistant-ui/react";
+import { makeAssistantToolUI, MessagePartPrimitive, MessagePrimitive } from "@assistant-ui/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import {
   ClockIcon,
   CalculatorIcon,
@@ -102,14 +103,30 @@ export const RenderWidgetToolUI = makeAssistantToolUI<{ title?: string; points?:
   ),
 });
 
-// Multi-agent: the `research` tool is itself a sub-agent. Render its activity as a nested,
-// read-only "Researcher agent" conversation (its search queries + cited briefing).
-export const ResearchToolUI = makeAssistantToolUI<
-  { topic?: string },
-  { topic?: string; plan?: string[]; briefing?: string }
->({
+// Nested subagent messages (rendered inside the research tool via MessagePartPrimitive.Messages).
+// Registered tool UIs are inherited here (scope inheritance), so the subagent's web_search
+// calls render with the same WebSearchToolUI card as the main thread.
+const SubUserMessage = () => (
+  <MessagePrimitive.Root data-role="user" className="mb-2">
+    <div className="bg-muted text-foreground inline-block rounded-lg px-3 py-1.5 text-sm">
+      <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+    </div>
+  </MessagePrimitive.Root>
+);
+
+const SubAssistantMessage = () => (
+  <MessagePrimitive.Root data-role="assistant" className="text-foreground text-sm leading-relaxed">
+    <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+  </MessagePrimitive.Root>
+);
+
+// Multi-agent (https://www.assistant-ui.com/docs/tools/multi-agent): the `research` tool is a
+// sub-agent. Its result carries a `messages` array (ToolCallMessagePart.messages) which we
+// render as a nested, read-only "Researcher agent" thread — its web searches, then its
+// cited briefing — instead of a flat card.
+export const ResearchToolUI = makeAssistantToolUI<{ topic?: string }, { answer?: string }>({
   toolName: "research",
-  render: ({ args, result, status }) => {
+  render: ({ args, status }) => {
     const running = status.type === "running";
     return (
       <div className="my-2 rounded-lg border p-3">
@@ -117,27 +134,18 @@ export const ResearchToolUI = makeAssistantToolUI<
           {running ? <Loader2Icon className="size-4 animate-spin" /> : <FlaskConicalIcon className="size-4" />}
           Researcher agent{running ? " · working…" : ""}
         </div>
-        <div className="ml-1 space-y-2 border-l pl-3">
-          <div className="text-sm">
-            <span className="text-muted-foreground">Topic: </span>
-            {result?.topic ?? args?.topic}
-          </div>
-          {result?.plan && result.plan.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {result.plan.map((q, i) => (
-                <span
-                  key={i}
-                  className="text-muted-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
-                >
-                  <SearchIcon className="size-3" />
-                  {q}
-                </span>
-              ))}
+        <div className="ml-1 border-l pl-3">
+          {running && (
+            <div className="text-muted-foreground text-sm">
+              <span className="text-muted-foreground">Topic: </span>
+              {args?.topic}
             </div>
           )}
-          {result?.briefing && (
-            <div className="text-sm leading-relaxed whitespace-pre-wrap">{result.briefing}</div>
-          )}
+          <MessagePartPrimitive.Messages>
+            {({ message }) =>
+              message.role === "user" ? <SubUserMessage /> : <SubAssistantMessage />
+            }
+          </MessagePartPrimitive.Messages>
         </div>
       </div>
     );

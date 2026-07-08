@@ -1,22 +1,19 @@
 "use client";
 
-import { AssistantRuntimeProvider, useAui, unstable_Interactables } from "@assistant-ui/react";
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar";
 import { Thread } from "@/components/assistant-ui/thread";
 import { useWorkflowAssistantRuntime } from "./runtime";
 import { ToolUIs } from "./tool-uis";
 import { QueueProvider } from "./queue";
-import { StickyNote } from "./interactable";
 
 // assistant-ui variant of the demo — same durable WorkflowAgent backend, different UI
 // framework, for side-by-side comparison with the AI Elements build at /c/<id>.
 export default function AuiPage() {
   const runtime = useWorkflowAssistantRuntime();
-  // Register interactables (the shared note the model can edit via update_note).
-  const aui = useAui({ unstable_interactables: unstable_Interactables() });
   return (
-    <AssistantRuntimeProvider aui={aui} runtime={runtime}>
+    <AssistantRuntimeProvider runtime={runtime}>
       <ToolUIs />
       {/* Collapsible sidebar — assistant-ui's design uses the shadcn default "offcanvas"
           (slides fully away). Toggle: the rail, <SidebarTrigger/>, or ⌘/Ctrl+B.
@@ -30,9 +27,6 @@ export default function AuiPage() {
           <QueueProvider>
             <Thread />
           </QueueProvider>
-          <div className="fixed right-4 bottom-4 z-20 w-72">
-            <StickyNote />
-          </div>
         </SidebarInset>
       </SidebarProvider>
     </AssistantRuntimeProvider>
