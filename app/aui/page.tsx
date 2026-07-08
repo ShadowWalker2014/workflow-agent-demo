@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar";
 import { Thread } from "@/components/assistant-ui/thread";
 import { useWorkflowAssistantRuntime } from "./runtime";
+import { ToolUIs } from "./tool-uis";
 
 // assistant-ui variant of the demo — same durable WorkflowAgent backend, different UI
 // framework, for side-by-side comparison with the AI Elements build at /c/<id>.
@@ -12,6 +13,7 @@ export default function AuiPage() {
   const runtime = useWorkflowAssistantRuntime();
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <ToolUIs />
       {/* Collapsible sidebar — assistant-ui's design uses the shadcn default "offcanvas"
           (slides fully away). Toggle: the rail, <SidebarTrigger/>, or ⌘/Ctrl+B.
           h-dvh + overflow-hidden: SidebarProvider is `min-h-svh` (grows) by default, which
