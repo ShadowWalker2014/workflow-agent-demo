@@ -127,7 +127,9 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
       }}
     >
       <ThreadPrimitive.Viewport
-        turnAnchor="top"
+        // "bottom" = classic stick-to-bottom auto-scroll (like AI Elements' Conversation).
+        // ("top" is the ChatGPT-style anchor-new-turn-to-top, which disables auto-scroll.)
+        turnAnchor="bottom"
         data-slot="aui_thread-viewport"
         className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
       >
